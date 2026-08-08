@@ -233,6 +233,8 @@ app.get('/bot/dashboard', ensureDashboardAuth, (req: any, res: any) => {
       const debugEl = document.getElementById('debug');
       const QR_REFRESH_SECONDS = 20;
       let qrCountdownInterval = null;
+      let activeQrValue = null;
+      let qrExpiresAt = 0;
 
       function statusClass(status) {
         if (status === 'connected') return 'status ok';
@@ -262,26 +264,37 @@ app.get('/bot/dashboard', ensureDashboardAuth, (req: any, res: any) => {
         qrCountdownInterval = null;
       }
 
-      function startQrCountdown() {
-        stopQrCountdown();
+      function setQrCountdownValue(value) {
+        const countEl = document.getElementById('qrCountdown');
+        if (countEl) {
+          countEl.textContent = String(value);
+        }
+      }
 
-        let remaining = QR_REFRESH_SECONDS;
-        const setCount = () => {
-          const countEl = document.getElementById('qrCountdown');
-          if (countEl) {
-            countEl.textContent = String(remaining);
+      function startQrCountdown(reset = false) {
+        if (reset || !qrExpiresAt) {
+          qrExpiresAt = Date.now() + (QR_REFRESH_SECONDS * 1000);
+        }
+
+        const updateCountdown = () => {
+          const remaining = Math.max(0, Math.ceil((qrExpiresAt - Date.now()) / 1000));
+          if (remaining <= 0) {
+            qrExpiresAt = Date.now() + (QR_REFRESH_SECONDS * 1000);
+            refresh();
+            setQrCountdownValue(QR_REFRESH_SECONDS);
+            return;
           }
+
+          setQrCountdownValue(remaining);
         };
 
-        setCount();
-        qrCountdownInterval = setInterval(() => {
-          remaining -= 1;
-          if (remaining <= 0) {
-            remaining = QR_REFRESH_SECONDS;
-            refresh();
-          }
-          setCount();
-        }, 1000);
+        updateCountdown();
+
+        if (qrCountdownInterval) {
+          return;
+        }
+
+        qrCountdownInterval = setInterval(updateCountdown, 1000);
       }
 
       function render(data) {
@@ -297,19 +310,35 @@ app.get('/bot/dashboard', ensureDashboardAuth, (req: any, res: any) => {
 
         if (data.status === 'pairing-code' && data.pairingCode) {
           stopQrCountdown();
+          activeQrValue = null;
+          qrExpiresAt = 0;
           qrBox.innerHTML = '<div class="qr-instructions">Masukkan pairing code ini dalam WhatsApp > Linked Devices > Link with phone number.</div><div class="pairing-code">' + data.pairingCode + '</div>';
         } else if (data.status === 'pairing-phone') {
           stopQrCountdown();
+          activeQrValue = null;
+          qrExpiresAt = 0;
           qrBox.innerHTML = '<div class="qr-instructions">Tunggu seketika, bot sedang minta pairing code daripada WhatsApp.</div>';
         } else if (data.status === 'qr' && data.qr) {
-          const src = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(data.qr);
-          qrBox.innerHTML = '<img alt="WhatsApp QR" src="' + src + '" /><div class="qr-instructions">Imbas kod ini pada telefon anda untuk sambungkan bot.<br/>QR akan refresh automatik dalam <strong id="qrCountdown">' + QR_REFRESH_SECONDS + '</strong>s.</div>';
-          startQrCountdown();
+          const hasQrCountdownNode = Boolean(document.getElementById('qrCountdown'));
+          const isQrChanged = data.qr !== activeQrValue;
+
+          if (isQrChanged || !hasQrCountdownNode) {
+            const src = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(data.qr);
+            qrBox.innerHTML = '<img alt="WhatsApp QR" src="' + src + '" /><div class="qr-instructions">Imbas kod ini pada telefon anda untuk sambungkan bot.<br/>QR akan refresh automatik dalam <strong id="qrCountdown">' + QR_REFRESH_SECONDS + '</strong>s.</div>';
+            activeQrValue = data.qr;
+            startQrCountdown(true);
+          } else {
+            startQrCountdown(false);
+          }
         } else if (data.status === 'connected') {
           stopQrCountdown();
+          activeQrValue = null;
+          qrExpiresAt = 0;
           qrBox.innerHTML = '<div class="qr-instructions">Bot connected. QR tidak diperlukan lagi.</div>';
         } else {
           stopQrCountdown();
+          activeQrValue = null;
+          qrExpiresAt = 0;
           qrBox.innerHTML = '<div class="qr-instructions">QR belum tersedia. Tunggu sehingga bot mengeluarkan kod sambungan.</div>';
         }
 

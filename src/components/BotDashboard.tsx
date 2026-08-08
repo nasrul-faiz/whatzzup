@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MessageCircle, QrCode, RefreshCw, ShieldAlert, Wifi, Phone, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRegisterRefresh } from '@/contexts/RefreshContext'
@@ -41,6 +41,8 @@ export function BotDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [state, setState] = useState<BotStatePayload | null>(null)
+  const [qrCountdownSecondsLeft, setQrCountdownSecondsLeft] = useState(QR_REFRESH_SECONDS)
+  const qrValueRef = useRef<string | null>(null)
 
   const token = useMemo(() => {
     const value = new URLSearchParams(window.location.search).get('token')
@@ -104,18 +106,36 @@ export function BotDashboard() {
     return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(state.qr)}`
   }, [state?.qr])
 
-  const qrRefreshSecondsLeft = useMemo(() => {
-    if (state?.status !== 'qr' || !state.updatedAt) return null
-
-    const updatedAtMs = new Date(state.updatedAt).getTime()
-    if (!Number.isFinite(updatedAtMs)) return QR_REFRESH_SECONDS
-
-    const elapsedSeconds = Math.floor((Date.now() - updatedAtMs) / 1000)
-    const remaining = QR_REFRESH_SECONDS - (elapsedSeconds % QR_REFRESH_SECONDS)
-    return remaining === QR_REFRESH_SECONDS ? QR_REFRESH_SECONDS : Math.max(1, remaining)
-  }, [state?.status, state?.updatedAt])
-
   const isPhonePairing = state?.pairingMethod === 'phone' || state?.status === 'pairing-phone' || state?.status === 'pairing-code'
+
+  useEffect(() => {
+    const isQrMode = state?.status === 'qr' && Boolean(state?.qr) && !isPhonePairing
+
+    if (!isQrMode) {
+      qrValueRef.current = null
+      setQrCountdownSecondsLeft(QR_REFRESH_SECONDS)
+      return
+    }
+
+    const currentQr = state?.qr ?? null
+    if (currentQr && currentQr !== qrValueRef.current) {
+      qrValueRef.current = currentQr
+      setQrCountdownSecondsLeft(QR_REFRESH_SECONDS)
+    }
+
+    const countdownTimer = window.setInterval(() => {
+      setQrCountdownSecondsLeft((prev) => {
+        if (prev <= 1) {
+          return QR_REFRESH_SECONDS
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => {
+      window.clearInterval(countdownTimer)
+    }
+  }, [state?.status, state?.qr, isPhonePairing])
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3 p-3 md:p-4 lg:p-5">
@@ -181,7 +201,7 @@ export function BotDashboard() {
             ) : qrImageUrl && !isPhonePairing ? (
               <div className="text-center px-3">
                 <img src={qrImageUrl} alt="WhatsApp QR" className="w-[240px] h-[240px] max-w-full max-h-full rounded-lg bg-white p-2 mx-auto" />
-                <p className="mt-2 text-[10px] text-muted-foreground">QR akan refresh automatik dalam {qrRefreshSecondsLeft ?? QR_REFRESH_SECONDS}s.</p>
+                <p className="mt-2 text-[10px] text-muted-foreground">QR akan refresh automatik dalam {qrCountdownSecondsLeft}s.</p>
               </div>
             ) : (
               <div className="text-center px-3">
