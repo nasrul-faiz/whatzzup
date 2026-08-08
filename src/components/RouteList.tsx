@@ -468,7 +468,7 @@ const LS_PLAYGROUND_ROUTES = 'fcalendar_custom_route_cards'
 const LS_SHARE_INDEX = 'fcalendar_share_index'
 const LS_WHATSAPP_LAST_TO = 'fcalendar_whatsapp_last_to'
 
-interface ShareIndexEntry { code: string; label: string; routeName: string; routeCode: string; routeShift: string; createdAt: string }
+interface ShareIndexEntry { code: string; label: string; routeId?: string; routeName: string; routeCode: string; routeShift: string; createdAt: string }
 
 type WhatsAppSendResult = {
   success?: boolean
@@ -514,6 +514,15 @@ const saveShareIndex = (entries: ShareIndexEntry[]) => {
   catch {
     // Ignore storage write failures.
   }
+}
+
+const filterShareIndexByRoute = (entries: ShareIndexEntry[], route?: Pick<Route, 'id' | 'name' | 'code' | 'shift'>): ShareIndexEntry[] => {
+  if (!route) return []
+  return entries.filter((entry) => {
+    // Prefer explicit routeId for new entries, and fallback to route identity for legacy rows.
+    if (entry.routeId) return entry.routeId === route.id
+    return entry.routeCode === route.code && entry.routeShift === route.shift && entry.routeName === route.name
+  })
 }
 
 const DEFAULT_ROUTE_LIST_HEADER_ITEMS: RouteListHeaderItem[] = [
@@ -2037,10 +2046,10 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
       toast.error('Failed to create share link')
       return
     }
-    const entry: ShareIndexEntry = { code, label: '', routeName: route.name, routeCode: route.code, routeShift: route.shift, createdAt }
+    const entry: ShareIndexEntry = { code, label: '', routeId: route.id, routeName: route.name, routeCode: route.code, routeShift: route.shift, createdAt }
     const index = [entry, ...loadShareIndex()]
     saveShareIndex(index)
-    setSavedLinks(index)
+    setSavedLinks(filterShareIndexByRoute(index, route))
     const base = import.meta.env.BASE_URL.replace(/\/$/, '')
     const url = window.location.origin + base + '/routelistpage/' + code
     setShareUrl(url)
@@ -2052,16 +2061,17 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
   }, [routes, currentRouteId, sortedDeliveryPoints, visibleDataColumns, routeIndexById, routeColorPalette])
 
   const openShareModal = useCallback(() => {
+    const route = routes.find(r => r.id === currentRouteId)
     setShareGenerated(false)
     setShareShowSaved(false)
     setShareUrl("")
     setShareCode("")
     setShareLabel("")
     setShareCopied(false)
-    setSavedLinks(loadShareIndex())
+    setSavedLinks(filterShareIndexByRoute(loadShareIndex(), route))
     setEditingLinkCode(null)
     setShareDialogOpen(true)
-  }, [])
+  }, [routes, currentRouteId])
 
   const openWhatsAppModal = useCallback(() => {
     const route = routes.find(r => r.id === currentRouteId)
@@ -5136,25 +5146,33 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
       <Dialog open={shareDialogOpen} onOpenChange={(open) => {
         if (!open) { setShareDialogOpen(false); setEditingLinkCode(null); setShareShowSaved(false) }
       }}>
-        <DialogContent className="flex max-h-[min(88vh,40rem)] w-[94vw] max-w-sm flex-col gap-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-0 shadow-xl">
+        <DialogContent className="flex max-h-[min(90vh,44rem)] w-[95vw] max-w-lg flex-col gap-0 overflow-hidden rounded-3xl border border-border/60 bg-card p-0 shadow-2xl">
           <DialogDescription className="sr-only">Share route table as a link</DialogDescription>
 
           {/* ── Saved Links View ───────────────────────────────────────────── */}
           {shareShowSaved ? (() => {
             const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+            const shareRoute = routes.find(r => r.id === currentRouteId)
             return (
               <>
                 {/* Header */}
-                <div className="shrink-0 px-4 pt-4 pb-3 border-b border-border/50 flex items-center gap-2.5">
+                <div className="shrink-0 border-b border-border/60 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-5 pt-5 pb-4">
+                  <div className="flex items-center gap-2.5">
                   <button
                     onClick={() => setShareShowSaved(false)}
                     className="shrink-0 size-7 inline-flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
                   >
                     <ChevronLeft className="size-4" />
                   </button>
-                  <DialogTitle className="text-sm font-semibold">
-                    Saved Links <span className="text-muted-foreground font-normal">({savedLinks.length})</span>
-                  </DialogTitle>
+                    <DialogTitle className="text-sm font-semibold">
+                      Share Link History <span className="text-muted-foreground font-normal">({savedLinks.length})</span>
+                    </DialogTitle>
+                  </div>
+                  {shareRoute && (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Route: <span className="font-medium text-foreground">{shareRoute.name}</span> · {shareRoute.code} · {shareRoute.shift}
+                    </p>
+                  )}
                 </div>
                 {/* List */}
                 <div className="flex-1 overflow-auto">
@@ -5169,7 +5187,7 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                       {savedLinks.map(link => {
                         const linkUrl = window.location.origin + base + '/routelistpage/' + link.code
                         return (
-                          <div key={link.code} className="px-4 py-3 space-y-2">
+                          <div key={link.code} className="px-5 py-4 space-y-2.5">
                             {editingLinkCode === link.code ? (
                               <div className="flex gap-1.5 items-center">
                                 <Input
@@ -5181,7 +5199,7 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                                     if (e.key === 'Enter') {
                                       const updated = loadShareIndex().map(en => en.code === link.code ? { ...en, label: editingLinkLabel } : en)
                                       saveShareIndex(updated)
-                                      setSavedLinks(updated)
+                                      setSavedLinks(filterShareIndexByRoute(updated, shareRoute))
                                       setEditingLinkCode(null)
                                     }
                                     if (e.key === 'Escape') setEditingLinkCode(null)
@@ -5190,7 +5208,7 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                                 <button onClick={() => {
                                   const updated = loadShareIndex().map(en => en.code === link.code ? { ...en, label: editingLinkLabel } : en)
                                   saveShareIndex(updated)
-                                  setSavedLinks(updated); setEditingLinkCode(null)
+                                  setSavedLinks(filterShareIndexByRoute(updated, shareRoute)); setEditingLinkCode(null)
                                 }} className="shrink-0 size-7 inline-flex items-center justify-center rounded-md border border-border hover:bg-muted/60 transition-colors text-green-600">
                                   <CheckIcon className="size-3.5" />
                                 </button>
@@ -5227,7 +5245,8 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                                 onClick={() => {
                                   fetch(`/api/share/${link.code}`, { method: 'DELETE' }).catch(() => {})
                                   const updated = loadShareIndex().filter(en => en.code !== link.code)
-                                  saveShareIndex(updated); setSavedLinks(updated)
+                                  saveShareIndex(updated)
+                                  setSavedLinks(filterShareIndexByRoute(updated, shareRoute))
                                 }}
                                 className="h-7 px-2.5 inline-flex items-center gap-1 rounded-lg border border-border bg-background text-[10px] font-medium text-destructive hover:bg-destructive/10 transition-colors ml-auto"
                               >
@@ -5249,18 +5268,17 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
               return (
                 <>
                   {/* Header */}
-                  <div className="shrink-0 px-5 pt-5 pb-4">
+                  <div className="shrink-0 border-b border-border/60 bg-gradient-to-br from-green-500/12 via-emerald-500/8 to-transparent px-6 pt-6 pb-5">
                     <DialogTitle className="text-base font-bold flex items-center gap-2.5">
                       <CheckIcon className="size-4 text-green-500 shrink-0" />
                       Link Generated
                     </DialogTitle>
-                    <p className="text-[11px] text-muted-foreground mt-1 ml-[2.625rem]">Ready to share on this device</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 ml-[2.625rem]">Ready to share for this route</p>
                   </div>
-                  <Separator />
-                  <div className="flex-1 overflow-auto px-5 py-4 flex flex-col gap-4">
+                  <div className="flex-1 overflow-auto px-6 py-5 flex flex-col gap-4">
                     {/* Route pill */}
                     {shareRoute && (
-                      <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
+                      <div className="flex items-center gap-2.5 rounded-2xl border border-border/60 bg-muted/35 px-3.5 py-3">
                         <div className="size-2.5 rounded-full shrink-0" style={{ background: shareRoute.color || routeColorPalette[(routeIndexById.get(shareRoute.id) ?? 0) % routeColorPalette.length] }} />
                         <span className="text-[12px] font-semibold truncate flex-1">{shareRoute.name}</span>
                         <span className="text-[10px] font-mono bg-background px-1.5 py-0.5 rounded border border-border/50 shrink-0">{shareRoute.code}</span>
@@ -5277,7 +5295,8 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                           setShareLabel(val)
                           if (shareCode) {
                             const updated = loadShareIndex().map(e => e.code === shareCode ? { ...e, label: val } : e)
-                            saveShareIndex(updated); setSavedLinks(updated)
+                            saveShareIndex(updated)
+                            setSavedLinks(filterShareIndexByRoute(updated, shareRoute))
                           }
                         }}
                         placeholder="e.g. Morning run for driver"
@@ -5299,12 +5318,11 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                       </div>
                     </div>
                   </div>
-                  <Separator />
-                  <div className="shrink-0 px-5 py-3 flex items-center gap-2">
+                  <div className="shrink-0 border-t border-border/60 px-6 py-4 flex items-center gap-2">
                     <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => window.open(shareUrl, '_blank', 'noopener,noreferrer')}>
                       <ExternalLink className="size-3.5" /> Open
                     </Button>
-                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => { setSavedLinks(loadShareIndex()); setShareShowSaved(true) }}>
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => { setSavedLinks(filterShareIndexByRoute(loadShareIndex(), shareRoute)); setShareShowSaved(true) }}>
                       <History className="size-3.5" /> History
                     </Button>
                     <Button size="sm" className="h-8 text-xs ml-auto" onClick={() => setShareDialogOpen(false)}>Done</Button>
@@ -5320,18 +5338,17 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
               return (
                 <>
                   {/* Header */}
-                  <div className="shrink-0 px-5 pt-5 pb-4">
+                  <div className="shrink-0 border-b border-border/60 bg-gradient-to-br from-primary/12 via-sky-500/8 to-transparent px-6 pt-6 pb-5">
                     <DialogTitle className="text-base font-bold flex items-center gap-2.5">
                       <Share2 className="size-4 text-primary shrink-0" />
                       Share Route
                     </DialogTitle>
-                    <p className="text-[11px] text-muted-foreground mt-1 ml-[2.625rem]">Create a shareable link for this route</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 ml-[2.625rem]">Create a dedicated link for this route only</p>
                   </div>
-                  <Separator />
-                  <div className="px-5 py-4 flex flex-col gap-4">
+                  <div className="px-6 py-5 flex flex-col gap-4">
                     {/* Route preview */}
                     {shareRoute ? (
-                      <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3 flex flex-col gap-2">
+                      <div className="rounded-2xl border border-border/60 bg-muted/35 px-4 py-3.5 flex flex-col gap-2">
                         <div className="flex items-center gap-2.5">
                           <div className="size-3 rounded-full shrink-0" style={{ background: routeColor }} />
                           <span className="text-[13px] font-semibold flex-1 truncate">{shareRoute.name}</span>
@@ -5355,14 +5372,13 @@ export function RouteList({ variant = 'route-list' }: RouteListProps) {
                     {savedLinks.length > 0 && (
                       <button
                         onClick={() => setShareShowSaved(true)}
-                        className="text-[11px] text-primary/80 hover:text-primary flex items-center gap-1 self-start"
+                        className="text-[11px] rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-primary/80 hover:text-primary hover:bg-muted/60 flex items-center gap-1 self-start transition-colors"
                       >
-                        <History className="size-3.5" />{savedLinks.length} saved link{savedLinks.length !== 1 ? 's' : ''}
+                        <History className="size-3.5" />{savedLinks.length} saved link{savedLinks.length !== 1 ? 's' : ''} for this route
                       </button>
                     )}
                   </div>
-                  <Separator />
-                  <div className="shrink-0 px-5 py-3 flex items-center justify-between gap-2">
+                  <div className="shrink-0 border-t border-border/60 px-6 py-4 flex items-center justify-between gap-2">
                     <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={() => setShareDialogOpen(false)}>Cancel</Button>
                     <Button size="sm" className="h-8 text-xs gap-1.5" onClick={generateShare} disabled={!shareRoute}>
                       <Share2 className="size-3.5" /> Generate Link

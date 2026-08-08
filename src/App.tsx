@@ -2051,7 +2051,9 @@ function AppContent() {
 
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {!isSharedView && (
-          <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+          <header
+            className="sticky top-[env(safe-area-inset-top)] z-20 flex h-12 sm:h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 sm:px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+          >
             <SidebarTrigger className="-ml-1 shrink-0" />
             <Separator orientation="vertical" className="h-4 shrink-0" />
 

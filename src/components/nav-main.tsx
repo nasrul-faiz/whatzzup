@@ -89,10 +89,10 @@ export function NavMain({
               <SidebarMenuItem>
                 <SidebarMenuButton
                   tooltip={item.title}
-                  className={`group relative h-10 justify-start rounded-lg border px-2.5 py-2 transition-colors ${isActive ? "border-sidebar-primary/30 bg-sidebar-accent text-foreground" : "border-transparent text-muted-foreground hover:border-sidebar-border/60 hover:bg-sidebar-accent/70 hover:text-foreground"}`}
+                  className={`group relative h-10 justify-start rounded-lg px-2.5 py-2 transition-colors ${isActive ? "text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground"}`}
                   onClick={() => handleToggle(item.title, hasChildren, item.page)}
                 >
-                  <div className={`flex h-7 w-7 items-center justify-center rounded-md border ${isActive ? "border-sidebar-primary/30 bg-sidebar/90" : "border-sidebar-border/60 bg-sidebar/60"}`}>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md">
                     <item.icon
                       className="size-[14px] shrink-0 transition-colors"
                       style={{ color: sectionColor }}
@@ -118,8 +118,8 @@ export function NavMain({
                           className={`ml-2 transition-all duration-300 ${!isOpen ? "pointer-events-none" : ""}`}
                           style={{
                             borderLeft: `2px solid color-mix(in srgb, ${sectionColor} 25%, transparent)`,
-                            paddingLeft: "0.6rem",
-                            marginLeft: "0.8rem",
+                            paddingLeft: "0.75rem",
+                            marginLeft: "1.5rem",
                           }}
                         >
                           {item.items?.map((subItem) => {

@@ -19,7 +19,7 @@ const META_TILE: Record<ResolvedColorMode, string> = {
 
 const APPLE_STATUS_BAR_STYLE: Record<ResolvedColorMode, string> = {
   light: "default",
-  dark:  "black-translucent",
+  dark:  "black",
 }
 
 export type AppFont =
